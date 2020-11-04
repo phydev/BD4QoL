@@ -5,3 +5,4 @@ matplotlib >= 3.0.3
 seaborn==0.10.1
 scispacy==0.3.0
 spacy==2.3.2
+en-core-sci-lg @ https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.3.0/en_core_sci_lg-0.3.0.tar.gz
