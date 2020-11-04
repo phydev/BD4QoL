@@ -1,0 +1,7 @@
+numpy >= 1.14.3
+scipy >= 1.2.1
+pandas==1.1.0
+matplotlib >= 3.0.3
+seaborn==0.10.1
+scispacy==0.3.0
+spacy==2.3.2
