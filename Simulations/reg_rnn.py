@@ -158,7 +158,7 @@ if __name__ == "__main__":
     
     X_train, X_test, y_train, y_test = tensor_train_test_split(df, features, outcome = "hn4_qol", test_size = 0.2)
     
-    n_features = 16
+    n_features = 17
     timesteps = 4
 
     model = Sequential([
