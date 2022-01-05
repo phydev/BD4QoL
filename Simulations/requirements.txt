@@ -1,0 +1,8 @@
+numpy==1.19.5
+scipy==1.6.2
+pandas==1.2.3
+scikit-learn==1.0.2
+Keras==2.4.3
+Keras-Preprocessing==1.1.2
+tensorflow==2.4.1
+tensorflow-estimator==2.4.0
