@@ -1,2 +1,2 @@
 # exclude jupyter notebooks from linguist analysis
-BD4QoL/Data[[:space:]]Harmonisation/similarity_matching.ipynb linguist-generated=true
+BD4QoL/data_harmonisation/similarity_matching.ipynb linguist-generated=true
