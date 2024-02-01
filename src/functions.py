@@ -3,6 +3,7 @@ import sklearn
 import pandas as pd
 import numpy as np
 import os
+import pickle
 
 
 def mkdir_safe(folder_name = '', prefix = 'results/'):
@@ -346,3 +347,147 @@ def plot_calibration(y_true, y_pred, mode='percentile', show_hist = True):
 
 
 
+def predict_wrapper(predict):
+    '''
+    Decorator to make the predict function general for binary and continuous outcomes
+    '''
+    def predict_general(X):
+        prediction = predict(X)
+        if prediction.shape[1] == 2:
+            prediction = prediction[:, 0]
+
+        return prediction
+
+    return predict_general
+
+
+def compute_bootstrap_metrics(n_bootstraps, 
+                              df, 
+                              bs, 
+                              covariates, 
+                              outcome, 
+                              variable_id,
+                              metrics_dict,
+                              models_root_directory = 'results/models/reduced/',
+                              model_directory = 'logreg_phys_func/',
+                              threshold = None, 
+                              outcome_type = 'binary', 
+                              prediction_function = 'predict_proba',
+                              ):
+    '''
+    This function computes the bootstrap metrics for a given model and a given set of metrics
+    provided by the metrics_dict. The metrics_dict is a dictionary with the name of the metric
+    and the function that computes the metric. The function should have the following signature:
+    metric_function(y_true, y_pred) where y_true is the true outcome and y_pred is the predicted
+    outcome. The function should return a single value.
+
+    // TODO:
+        This function be generalized further:
+        - Allow metrics that take the classification instead of the probability
+
+    '''
+
+
+    df_orig = df.copy(deep=True)
+
+    # filter missing outcomes
+    df_orig = df_orig[~df_orig[outcome].isna()]
+
+
+    # separate predictors and outcome
+    X_orig = df_orig[covariates]
+
+    # check if the outcome is binary or continuous
+    if outcome_type == 'binary':
+        #  define labels
+        df_orig = df_orig.assign(label = np.where(df_orig[outcome]<threshold, 1, 0))
+
+        y_orig = df_orig['label']
+    else:
+        y_orig = df_orig[outcome]    
+    
+    bootstrap_metrics = {}
+
+    model_file = models_root_directory + model_directory + 'model_orig.pkl'
+
+    with open(model_file, 'rb') as file:
+        model = pickle.load(file)
+
+    # decorate the predict function to make it general for binary and continuous outcomes
+    predict = predict_wrapper(getattr(model, prediction_function))
+
+    # Make predictions on the original data
+    y_pred_orig = predict(X_orig)
+
+    for name, metric in metrics_dict.items():
+        print(name)
+        bootstrap_metrics[name] = {}
+
+        # Calculate the metrics for original data
+        bootstrap_metrics[name]['orig'] = metric(y_orig, y_pred_orig)
+
+        # train in the bootstrap and test in the oob samples
+        bootstrap_metrics[name]['oob'] = np.zeros(n_bootstraps)
+
+        # train in the bootstrap and test in the bootstrap
+        bootstrap_metrics[name]['bs'] = np.zeros(n_bootstraps)
+
+        # train in the bootstrap and test in the original data
+        bootstrap_metrics[name]['bs_orig'] = np.zeros(n_bootstraps)
+
+    for bootstrap in range(n_bootstraps):
+        print('Bootstrap', bootstrap)
+
+        # load model from results/models/reduced
+        model_file = models_root_directory + model_directory + 'model_bs' + str(bootstrap + 1) + '.pkl'
+
+        with open(model_file, 'rb') as file:
+            model = pickle.load(file)
+        
+        # decorate the predict function to make it general for binary and continuous outcomes
+        predict = predict_wrapper(getattr(model, prediction_function))
+
+        # select observations in the bootstrap
+        bs_n = df.iloc[bs[bs['bs_id'] == bootstrap + 1].loc[:, 'studyid'], :].copy(deep=True)
+
+        # filter missing outcomes
+        bs_n = bs_n[~bs_n[outcome].isna()]
+
+        oob = get_oob_samples(df, bs_n.loc[:, variable_id])
+        
+        # bootstrap data
+        X_train = bs_n.loc[:, covariates]
+
+        # check if the outcome is binary or continuous
+        if outcome_type == 'binary':
+
+            # define labels
+            bs_n = bs_n.assign(label = np.where(bs_n[outcome] < threshold, 1, 0))
+            oob = oob.assign(label = np.where(oob[outcome] < threshold, 1, 0))
+
+            # select binary outcome
+            y_train = bs_n.loc[:, 'label']
+            y_oob = oob.loc[:, 'label']
+
+        else:
+            
+            # select continuous outcome
+            y_train = bs_n.loc[:, outcome]
+            y_oob = oob.loc[:, outcome]
+
+        # bootstrap out-of-bag samples
+        X_oob = oob.loc[:, covariates]
+        
+
+        # Make predictions on the test data
+        predictions_oob = predict(X_oob)
+        predictions_bs = predict(X_train)
+        predictions_orig = predict(X_orig)
+
+        for metric_name, metric_function in metrics_dict.items():
+            # Calculate metrics
+            bootstrap_metrics[metric_name]['oob'][bootstrap] = metric_function(y_oob, predictions_oob)
+            bootstrap_metrics[metric_name]['bs'][bootstrap] = metric_function(y_train, predictions_bs)
+            bootstrap_metrics[metric_name]['bs_orig'][bootstrap] = metric_function(y_orig, predictions_orig)
+
+    return bootstrap_metrics
